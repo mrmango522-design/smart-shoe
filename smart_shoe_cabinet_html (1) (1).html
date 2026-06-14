@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>智能鞋櫃</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier"></script>
+    <style>
+        body {
+            font-family: "Microsoft JhengHei", Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            max-width: 1240px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .connect-btn {
+            display: block;
+            margin: 0 auto 25px;
+            background: orange;
+            color: white;
+            border: none;
+            padding: 14px 36px;
+            font-size: 18px;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+        .weather-box {
+            background: linear-gradient(135deg, #74b9ff, #0984e3);
+            color: white;
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+            font-size: 26px;
+            text-align: center;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+            position: relative;
+        }
+        .rain-buttons {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .rain-buttons button {
+            background: rgba(255, 255, 255, 0.3); /* 較淡色 */
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .main-content {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        .left-panel, .right-panel {
+            background: white;
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+        }
+        .left-panel { flex: 5.5; }
+        .right-panel { flex: 4.5; }
+
+        /* 標題置中樣式 */
+        .cabinet h2 {
+            text-align: center;
+            margin: 0 0 15px 0;
+            font-size: 22px;
+            color: #2d3436;
+        }
+
+        .cabinet {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+        }
+        .status {
+            display: flex;
+            justify-content: space-between;
+            margin: 12px 0;
+            font-size: 17px;
+            font-weight: 500;
+        }
+        .buttons button {
+            margin: 6px 6px;
+            padding: 10px 14px;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 15px;
+        }
+        .fan-btn { background: #00b894; }
+        .uv-btn { background: #6c5ce7; }
+        video {
+            width: 100%;
+            max-width: 520px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .flip-btn {
+            margin-top: 12px;
+            background: #2d3436;
+            color: white;
+            padding: 10px 24px;
+            border: none;
+            border-radius: 8px;
+        }
+        .learn-buttons, .recog-buttons {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+        }
+        .learn-buttons button, .recog-buttons button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            background: #3498db;
+        }
+        .bars {
+            margin-top: 20px;
+        }
+        .bars > div {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .bar {
+            flex: 1;
+            height: 20px;
+            background: #4caf50; /* 單色綠色 */
+            border: 1px solid #ccc;
+            margin-left: 10px;
+            width: 0%;
+        }
+        .prob {
+            margin-left: 10px;
+            min-width: 40px;
+        }
+        .counts {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .counts div {
+            text-align: center;
+            font-size: 16px;
+        }
+        .wear-counts-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            max-width: 1240px;
+            margin: 0 auto;
+        }
+        .wear-box {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .wear-box h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+        }
+        .wear-box .total {
+            font-size: 32px;
+            font-weight: bold;
+            color: #74b9ff;
+        }
+        @media (max-width: 1024px) {
+            .wear-counts-container { grid-template-columns: repeat(2, 1fr); }
+            .learn-buttons, .recog-buttons { flex-direction: column; }
+        }
+        @media (max-width: 640px) {
+            .main-content { flex-direction: column; }
+            .wear-counts-container { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>智能鞋櫃</h1>
+        <button class="connect-btn" onclick="connectMicrobit()">連接 Micro:bit</button>
+
+        <div class="weather-box">
+            <div id="dateDisplay">載入中...</div>
+            <div id="rainChance" style="margin-top:8px; font-size:28px;"><strong>降雨機率：10%</strong></div>
+            <div id="suggestion" style="margin-top:10px; font-size:20px;"></div>
+            <div class="rain-buttons">
+                <button onclick="setHighRain()">大機會下雨</button>
+                <button onclick="setLowRain()">小機會下雨</button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="left-panel">
+
+                <!-- 鞋櫃1號：運動鞋 -->
+                <div class="cabinet"><h2>鞋櫃1號：運動鞋</h2>
+                    <div class="status">
+                        <p id="detect1">感測到鞋：無</p>
+                        <p id="disinfect1">上次消毒日期：</p>
+                        <p id="humidity1">濕度：</p>
+                    </div>
+                    <div class="buttons">
+                        <button class="fan-btn" onclick="sendCommand('Open Fan1')">開啟風扇</button>
+                        <button class="fan-btn" onclick="sendCommand('Close Fan1')">關閉風扇</button>
+                        <button class="uv-btn" onclick="sendCommand('Open UV1')">開啟紫外光燈</button>
+                        <button class="uv-btn" onclick="sendCommand('Close UV1',1)">關閉紫外光燈</button>
+                    </div>
+                </div>
+
+                <!-- 鞋櫃2號：皮鞋 -->
+                <div class="cabinet"><h2>鞋櫃2號：皮鞋</h2>
+                    <div class="status">
+                        <p id="detect2">感測到鞋：無</p>
+                        <p id="disinfect2">上次消毒日期：</p>
+                        <p id="humidity2">濕度：</p>
+                    </div>
+                    <div class="buttons">
+                        <button class="fan-btn" onclick="sendCommand('Open Fan2')">開啟風扇</button>
+                        <button class="fan-btn" onclick="sendCommand('Close Fan2')">關閉風扇</button>
+                        <button class="uv-btn" onclick="sendCommand('Open UV2')">開啟紫外光燈</button>
+                        <button class="uv-btn" onclick="sendCommand('Close UV2',2)">關閉紫外光燈</button>
+                    </div>
+                </div>
+
+                <!-- 鞋櫃3號：雨靴 -->
+                <div class="cabinet"><h2>鞋櫃3號：雨靴</h2>
+                    <div class="status">
+                        <p id="detect3">感測到鞋：無</p>
+                        <p id="disinfect3">上次消毒日期：</p>
+                        <p id="humidity3">濕度：</p>
+                    </div>
+                    <div class="buttons">
+                        <button class="fan-btn" onclick="sendCommand('Open Fan3')">開啟風扇</button>
+                        <button class="fan-btn" onclick="sendCommand('Close Fan3')">關閉風扇</button>
+                        <button class="uv-btn" onclick="sendCommand('Open UV3')">開啟紫外光燈</button>
+                        <button class="uv-btn" onclick="sendCommand('Close UV3',3)">關閉紫外光燈</button>
+                    </div>
+                </div>
+
+                <!-- 鞋櫃4號：拖鞋 -->
+                <div class="cabinet"><h2>鞋櫃4號：拖鞋</h2>
+                    <div class="status">
+                        <p id="detect4">感測到鞋：無</p>
+                        <p id="disinfect4">上次消毒日期：</p>
+                        <p id="humidity4">濕度：</p>
+                    </div>
+                    <div class="buttons">
+                        <button class="fan-btn" onclick="sendCommand('Open Fan4')">開啟風扇</button>
+                        <button class="fan-btn" onclick="sendCommand('Close Fan4')">關閉風扇</button>
+                        <button class="uv-btn" onclick="sendCommand('Open UV4')">開啟紫外光燈</button>
+                        <button class="uv-btn" onclick="sendCommand('Close UV4',4)">關閉紫外光燈</button>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="right-panel">
+                <video id="video" autoplay playsinline></video>
+                <br>
+                <button class="flip-btn" onclick="flipVideo()">水平翻轉影像</button>
+
+                <!-- 學習按鈕 -->
+                <div class="learn-buttons">
+                    <button onmousedown="startLearning(1)" onmouseup="stopLearning()" ontouchstart="startLearning(1)" ontouchend="stopLearning()">學習Class 1</button>
+                    <button onmousedown="startLearning(2)" onmouseup="stopLearning()" ontouchstart="startLearning(2)" ontouchend="stopLearning()">學習Class 2</button>
+                    <button onmousedown="startLearning(3)" onmouseup="stopLearning()" ontouchstart="startLearning(3)" ontouchend="stopLearning()">學習Class 3</button>
+                    <button onmousedown="startLearning(4)" onmouseup="stopLearning()" ontouchstart="startLearning(4)" ontouchend="stopLearning()">學習背景</button>
+                </div>
+
+                <!-- 辨認按鈕 -->
+                <div class="recog-buttons">
+                    <button onclick="startRecognition()">開始辨認</button>
+                    <button onclick="stopRecognition()">停止辨認</button>
+                </div>
+
+                <!-- 相似度條 -->
+                <div class="bars">
+                    <div>Class 1: <div id="bar1" class="bar"></div> <span id="prob1">0%</span></div>
+                    <div>Class 2: <div id="bar2" class="bar"></div> <span id="prob2">0%</span></div>
+                    <div>Class 3: <div id="bar3" class="bar"></div> <span id="prob3">0%</span></div>
+                    <div>背景: <div id="bar4" class="bar"></div> <span id="prob4">0%</span></div>
+                </div>
+
+                <!-- 已學習相片數量 -->
+                <div class="counts">
+                    <div>Class 1 已學習: <span id="count1">0</span> 張</div>
+                    <div>Class 2 已學習: <span id="count2">0</span> 張</div>
+                    <div>Class 3 已學習: <span id="count3">0</span> 張</div>
+                    <div>背景 已學習: <span id="count4">0</span> 張</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="wear-counts-container">
+            <div class="wear-box">
+                <h3>鞋櫃1號：運動鞋 本月穿著次數</h3>
+                <div class="total" id="total1">0</div>
+            </div>
+            <div class="wear-box">
+                <h3>鞋櫃2號：皮鞋 本月穿著次數</h3>
+                <div class="total" id="total2">0</div>
+            </div>
+            <div class="wear-box">
+                <h3>鞋櫃3號：雨靴 本月穿著次數</h3>
+                <div class="total" id="total3">0</div>
+            </div>
+            <div class="wear-box">
+                <h3>鞋櫃4號：拖鞋 本月穿著次數</h3>
+                <div class="total" id="total4">0</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let port, reader, writer;
+        const wearCounts = {1: Array(31).fill(0),2: Array(31).fill(0),3: Array(31).fill(0),4: Array(31).fill(0)};
+        const today = new Date().getDate() - 1;
+
+        let classifier;
+        let mobilenetModel;
+        let learnInterval;
+        let recogInterval;
+        let classCounts = {1: 0, 2: 0, 3: 0, 4: 0};
+
+        async function loadModels() {
+            mobilenetModel = await mobilenet.load();
+            classifier = knnClassifier.create();
+        }
+        loadModels();
+
+        function updateDateOnly() {
+            const now = new Date();
+            const week = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+            const dateStr = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${week[now.getDay()]}`;
+            document.getElementById('dateDisplay').textContent = dateStr;
+        }
+        updateDateOnly();
+
+        // 更新高雨機率和建議
+        function setHighRain() {
+            document.getElementById('rainChance').innerHTML = `<strong>降雨機率：80%</strong>`;
+            document.getElementById('suggestion').textContent = '建議穿著：雨靴';
+        }
+
+        // 更新低雨機率和建議
+        function setLowRain() {
+            document.getElementById('rainChance').innerHTML = `<strong>降雨機率：10%</strong>`;
+            document.getElementById('suggestion').textContent = '建議穿著：正常';
+        }
+
+        async function connectMicrobit() {
+            try {
+                port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x0D28 }] });
+                await port.open({ baudRate: 115200 });
+                writer = port.writable.getWriter();
+                reader = port.readable.getReader();
+                alert('Micro:bit 連接成功！');
+                readLoop();
+            } catch (e) {
+                alert('連接失敗：' + e.message);
+            }
+        }
+
+        async function sendCommand(cmd, num = null) {
+            if (!writer) { alert('請先連接 Micro:bit'); return; }
+            await writer.write(new TextEncoder().encode(cmd + '\n'));
+            if (cmd.startsWith('Close UV') && num) {
+                const date = new Date().toLocaleDateString('zh-TW');
+                document.getElementById(`disinfect${num}`).textContent = `上次消毒日期：${date}`;
+            }
+        }
+
+        async function readLoop() {
+            while (true) {
+                try {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const text = new TextDecoder().decode(value).trim();
+                    console.log('Micro:bit → ', text);
+
+                    if (text.startsWith('Shoe')) {
+                        const match = text.match(/Shoe(\d):(\d)/);
+                        if (match) {
+                            const num = match[1], state = match[2];
+                            const prev = document.getElementById(`detect${num}`).textContent.includes('有') ? '1' : '0';
+                            document.getElementById(`detect${num}`).textContent = `感測到鞋：${state === '1' ? '有' : '無'}`;
+                            if (prev === '0' && state === '1') {
+                                wearCounts[num][today]++;
+                                updateTotal(num);
+                            }
+                        }
+                    } else if (text.startsWith('Humidity')) {
+                        const match = text.match(/Humidity(\d):(\d+)/);
+                        if (match) {
+                            document.getElementById(`humidity${match[1]}`).textContent = `濕度：${match[2]}%`;
+                        }
+                    }
+                } catch (e) {
+                    console.error('讀取錯誤:', e);
+                    break;
+                }
+            }
+        }
+
+        // 相機
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                document.getElementById('video').srcObject = stream;
+            })
+            .catch(() => alert('無法開啟相機'));
+
+        let flipped = false;
+        function flipVideo() {
+            flipped = !flipped;
+            document.getElementById('video').style.transform = flipped ? 'scaleX(-1)' : 'scaleX(1)';
+        }
+
+        // 捕獲圖像
+        function captureImage() {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            return tf.browser.fromPixels(canvas);
+        }
+
+        // 開始學習
+        function startLearning(classId) {
+            learnInterval = setInterval(async () => {
+                const img = captureImage();
+                const activation = mobilenetModel.infer(img, true);
+                classifier.addExample(activation, classId);
+                classCounts[classId]++;
+                document.getElementById(`count${classId}`).textContent = classCounts[classId];
+                console.log(`已添加至 Class ${classId}`);
+                img.dispose(); // 釋放tensor
+            }, 100); // 每0.1秒
+        }
+
+        function stopLearning() {
+            clearInterval(learnInterval);
+        }
+
+        // 開始辨認
+        function startRecognition() {
+            recogInterval = setInterval(async () => {
+                const img = captureImage();
+                const activation = mobilenetModel.infer(img, true);
+                const result = await classifier.predictClass(activation);
+                for (let i = 1; i <= 4; i++) {
+                    const prob = Math.round((result.confidences[i] || 0) * 100);
+                    document.getElementById(`bar${i}`).style.width = `${prob}%`;
+                    document.getElementById(`prob${i}`).textContent = `${prob}%`;
+                }
+
+                // 发送辨认结果到Microbit
+                const topClass = result.label;
+                let command;
+                switch (topClass) {
+                    case '1':
+                        command = 'Class 1';
+                        break;
+                    case '2':
+                        command = 'Class 2';
+                        break;
+                    case '3':
+                        command = 'Class 3';
+                        break;
+                    case '4':
+                        command = 'Background';
+                        break;
+                    default:
+                        command = null;
+                }
+                if (command) {
+                    sendCommand(command);
+                }
+
+                img.dispose();
+            }, 1000); // 每秒一次
+        }
+
+        function stopRecognition() {
+            clearInterval(recogInterval);
+        }
+
+        // 初始化總穿著次數顯示
+        function initTotals() {
+            for (let i = 1; i <= 4; i++) {
+                updateTotal(i);
+            }
+        }
+
+        // 更新特定鞋子的本月總穿著次數
+        function updateTotal(num) {
+            const total = wearCounts[num].reduce((a, b) => a + b, 0);
+            document.getElementById(`total${num}`).textContent = total;
+        }
+
+        initTotals();
+    </script>
+</body>
+</html>
